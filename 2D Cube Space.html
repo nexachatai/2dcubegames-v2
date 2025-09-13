@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Cube Space - Dodge the Cubes!</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <script type="module">
+
+        // Local Leaderboard System (fallback when Firebase is not available)
+        let userId = null;
+        let isAuthReady = false;
+        let useLocalStorage = true;
+
+        const leaderboardStatus = document.getElementById('leaderboardStatus');
+        const userIdDisplay = document.getElementById('userIdDisplay');
+
+        // Initialize local leaderboard system
+        function initializeLocalLeaderboard() {
+            userId = localStorage.getItem('gameUserId') || crypto.randomUUID();
+            localStorage.setItem('gameUserId', userId);
+            isAuthReady = true;
+            userIdDisplay.textContent = `Player ${userId.substring(0, 8)}`;
+            leaderboardStatus.textContent = 'Local Leaderboard';
+            setupLocalLeaderboardListener();
+        }
+
+        // Initialize the leaderboard system
+        initializeLocalLeaderboard();
+
+        // --- Local Leaderboard Functions ---
+        function setupLocalLeaderboardListener() {
+            if (!isAuthReady) return;
+            loadAndRenderLeaderboard();
+        }
+        
+        function loadAndRenderLeaderboard() {
+            const scores = getLocalScores();
+            renderLeaderboard(scores);
+        }
+        
+        function getLocalScores() {
+            const scoresData = localStorage.getItem('gameLeaderboard');
+            if (!scoresData) return [];
+            
+            try {
+                const scores = JSON.parse(scoresData);
+                return scores.map(score => ({
+                    ...score,
+                    name: score.userId === userId ? `You (${score.name})` : score.name
+                }));
+            } catch (e) {
+                console.error('Error parsing leaderboard data:', e);
+                return [];
+            }
+        }
+        
+        function saveHighScore(newScore) {
+            if (!isAuthReady) {
+                console.error("System not ready. Cannot save score.");
+                return;
+            }
+        
+            const userName = `Player ${userId.substring(0, 8)}`;
+            let scores = getLocalScores();
+            
+            // Find existing user score
+            const existingScoreIndex = scores.findIndex(score => score.userId === userId);
+            
+            if (existingScoreIndex !== -1) {
+                // Update existing score if new score is higher
+                if (newScore > scores[existingScoreIndex].score) {
+                    scores[existingScoreIndex].score = newScore;
+                    scores[existingScoreIndex].timestamp = Date.now();
+                }
+            } else {
+                // Add new score
+                scores.push({
+                    userId: userId,
+                    name: userName,
+                    score: newScore,
+                    timestamp: Date.now()
+                });
+            }
+            
+            // Keep only top 10 scores
+            scores.sort((a, b) => b.score - a.score);
+            scores = scores.slice(0, 10);
+            
+            // Save to localStorage
+            localStorage.setItem('gameLeaderboard', JSON.stringify(scores));
+            
+            // Refresh the leaderboard display
+            loadAndRenderLeaderboard();
+        }
+        
+        function renderLeaderboard(scores) {
+            const scoreList = document.getElementById('scoreList');
+            scoreList.innerHTML = '';
+            leaderboardStatus.textContent = 'Top Scores';
+            
+            if (scores.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = 'No scores yet.';
+                li.className = 'text-slate-400 text-center italic';
+                scoreList.appendChild(li);
+                return;
+            }
+        
+            // Sort the scores by value in descending order and limit to top 5
+            const sortedScores = scores.sort((a, b) => b.score - a.score).slice(0, 5);
+        
+            sortedScores.forEach((s, index) => {
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center bg-slate-700 rounded-lg px-3 py-2 text-white font-semibold';
+                li.innerHTML = `
+                    <span class="text-teal-300">#${index + 1}</span>
+                    <span>${s.name}: ${s.score}</span>
+                `;
+                scoreList.appendChild(li);
+            });
+        }
+        
+        window.saveHighScore = saveHighScore;
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            background: #0f172a; /* Solid dark background for the star effect */
+            border: 2px solid #14b8a6;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 flex items-center justify-center min-h-screen p-4">
+
+    <!-- Main Content Container: Stacks vertically on mobile, horizontally on larger screens -->
+    <div class="flex flex-col lg:flex-row items-center justify-center lg:space-x-8 space-y-8 lg:space-y-0">
+
+        <!-- Leaderboard Sidebar -->
+        <div id="leaderboard" class="bg-slate-800 rounded-lg p-6 shadow-2xl w-80 h-[600px] flex flex-col justify-between">
+            <div>
+                <h3 class="text-2xl font-bold text-teal-400 mb-4">Local Leaderboard</h3>
+                <p id="leaderboardStatus" class="text-slate-400 text-center text-sm mb-4">Loading scores...</p>
+                <ul id="scoreList" class="space-y-2">
+                    <!-- Scores will be dynamically inserted here -->
+                </ul>
+            </div>
+            <div class="text-right text-sm text-slate-500 mt-4">
+                <p>Scores are stored locally.</p>
+            </div>
+        </div>
+
+        <!-- Game Container -->
+        <div class="relative">
+            
+            <!-- Game Canvas -->
+            <canvas id="gameCanvas" width="800" height="600" class="rounded-lg shadow-2xl"></canvas>
+            
+            <!-- Game UI Overlay -->
+            <div class="absolute top-4 left-4 right-4 flex justify-between items-center pointer-events-none">
+                <div class="flex flex-col gap-2 bg-slate-800/80 rounded-lg px-4 py-2">
+                    <div class="flex items-center gap-4">
+                        <span class="text-teal-400 font-bold">Score: </span>
+                        <span id="score" class="text-white font-bold">0</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="text-slate-400 font-bold">User ID:</span>
+                        <span id="userIdDisplay" class="text-slate-500 font-mono text-xs overflow-hidden whitespace-nowrap overflow-ellipsis w-48">Loading...</span>
+                    </div>
+                </div>
+
+                <!-- Health Bar and FPS Counter Container -->
+                <div class="flex items-center gap-4">
+                    <!-- Health Bar -->
+                    <div id="healthBarContainer" class="w-32 h-4 bg-slate-800/80 rounded-full overflow-hidden border border-slate-600">
+                        <div id="healthBarFill" class="h-full bg-green-500 transition-all duration-200"></div>
+                    </div>
+
+                    <button id="pauseBtn" class="pointer-events-auto bg-slate-800/80 rounded-lg px-4 py-2 text-white hover:bg-slate-700/80 transition-colors duration-200">
+                        Pause
+                    </button>
+                    <button id="shopBtn" class="pointer-events-auto bg-yellow-600/80 rounded-lg px-4 py-2 text-white hover:bg-yellow-500/80 transition-colors duration-200">
+                        Shop
+                    </button>
+                    <div id="fpsCounter" class="bg-slate-800/80 rounded-lg px-4 py-2 hidden">
+                        <span class="text-teal-400 font-bold">FPS: </span>
+                        <span id="fpsValue" class="text-white font-bold">--</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Mobile Controls - Visible only on small screens -->
+            <div class="lg:hidden absolute bottom-4 left-0 right-0 flex justify-center space-x-8 pointer-events-auto">
+                <button id="moveLeftBtn" class="bg-slate-800/80 rounded-full w-20 h-20 text-white text-3xl font-bold shadow-lg transition-all duration-200 transform hover:scale-110 active:scale-90">
+                    &larr;
+                </button>
+                <button id="moveRightBtn" class="bg-slate-800/80 rounded-full w-20 h-20 text-white text-3xl font-bold shadow-lg transition-all duration-200 transform hover:scale-110 active:scale-90">
+                    &rarr;
+                </button>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="gameOverScreen" class="absolute inset-0 bg-slate-900/90 flex items-center justify-center hidden">
+                <div class="bg-slate-800 rounded-2xl p-8 text-center shadow-2xl space-y-6">
+                    <h2 class="text-4xl font-extrabold text-red-400">Game Over!</h2>
+                    <p class="text-xl text-slate-300">Final Score: <span id="finalScore" class="text-teal-400 font-bold">0</span></p>
+                    <div class="space-y-3">
+                        <button id="restartBtn" class="w-full bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                            Play Again
+                        </button>
+                        <a href="homepage.html" class="block w-full bg-slate-600 hover:bg-slate-500 text-slate-200 font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                            Back to Home
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pause Menu -->
+            <div id="pauseMenu" class="absolute inset-0 bg-slate-900/90 flex items-center justify-center hidden">
+                <div class="bg-slate-800 rounded-2xl p-8 text-center shadow-2xl space-y-6">
+                    <h2 class="text-4xl font-extrabold text-teal-400">Paused</h2>
+                    <div id="saveMessage" class="hidden absolute top-4 left-1/2 -translate-x-1/2 bg-green-500 text-white text-sm font-bold px-4 py-2 rounded-full transition-opacity duration-300">
+                        Settings Saved!
+                    </div>
+                    <p class="text-lg text-slate-300">Press ESC or click resume to continue.</p>
+                    <div class="space-y-4">
+                        <div class="bg-slate-700 rounded-lg px-4 py-2 flex items-center justify-between gap-2 pointer-events-auto">
+                            <label for="volumeSlider" class="text-teal-300 font-bold text-sm">Volume</label>
+                            <input type="range" id="volumeSlider" min="0" max="100" value="70">
+                        </div>
+                        <div class="bg-slate-700 rounded-lg px-4 py-2 flex items-center justify-between gap-2 pointer-events-auto">
+                            <label for="perfModeToggle" class="text-teal-300 font-bold text-sm">Performance Mode</label>
+                            <input type="checkbox" id="perfModeToggle" class="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 dark:focus:ring-teal-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600">
+                        </div>
+                        <div class="bg-slate-700 rounded-lg px-4 py-2 flex items-center justify-between gap-2 pointer-events-auto">
+                            <label for="fpsToggle" class="text-teal-300 font-bold text-sm">Show FPS</label>
+                            <input type="checkbox" id="fpsToggle" class="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 dark:focus:ring-teal-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600">
+                        </div>
+                        <div class="bg-slate-700 rounded-lg px-4 py-2 flex items-center justify-between gap-2 pointer-events-auto">
+                            <label for="speedSlider" class="text-teal-300 font-bold text-sm">Movement Speed</label>
+                            <input type="range" id="speedSlider" min="1" max="10" value="5">
+                        </div>
+                        <div class="bg-slate-700 rounded-lg px-4 py-2 flex items-center justify-between gap-2 pointer-events-auto">
+                            <label for="steeringModeToggle" class="text-teal-300 font-bold text-sm">Steering Mode</label>
+                            <input type="checkbox" id="steeringModeToggle" class="w-4 h-4 text-teal-600 bg-gray-100 border-gray-300 rounded focus:ring-teal-500 dark:focus:ring-teal-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600">
+                        </div>
+                    </div>
+                    <button id="saveSettingsBtn" class="w-full bg-slate-600 hover:bg-slate-500 text-slate-200 font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                        Save Settings
+                    </button>
+                    <button id="resumeBtn" class="w-full bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                        Resume Game
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Shop Screen -->
+            <div id="shopScreen" class="absolute inset-0 bg-slate-900/90 flex items-center justify-center hidden">
+                <div class="bg-slate-800 rounded-2xl p-8 text-center shadow-2xl space-y-6 max-w-2xl w-full mx-4">
+                    <h2 class="text-4xl font-extrabold text-yellow-400">Premium Shop</h2>
+                    <p class="text-lg text-slate-300">Unlock premium features and support development!</p>
+                    
+                    <!-- Premium Status -->
+                    <div id="premiumStatus" class="bg-slate-700 rounded-lg p-4">
+                        <p class="text-slate-300">Status: <span id="userPremiumStatus" class="font-bold text-red-400">Free User</span></p>
+                    </div>
+                    
+                    <!-- Premium Features -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-slate-700 rounded-lg p-4 space-y-3">
+                            <h3 class="text-xl font-bold text-teal-400">Premium Skins</h3>
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-300">Golden Cube</span>
+                                    <span id="goldenSkinStatus" class="text-red-400 text-sm">🔒 Premium</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-300">Rainbow Cube</span>
+                                    <span id="rainbowSkinStatus" class="text-red-400 text-sm">🔒 Premium</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-slate-700 rounded-lg p-4 space-y-3">
+                            <h3 class="text-xl font-bold text-teal-400">Premium Features</h3>
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-300">Shield Power-up</span>
+                                    <span id="shieldStatus" class="text-red-400 text-sm">🔒 Premium</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-slate-300">Slow Motion</span>
+                                    <span id="slowMoStatus" class="text-red-400 text-sm">🔒 Premium</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Purchase Section -->
+                    <div class="bg-gradient-to-r from-yellow-600 to-yellow-500 rounded-lg p-6 space-y-4">
+                        <h3 class="text-2xl font-bold text-slate-900">Get Premium Access</h3>
+                        <p class="text-slate-800">Unlock all premium features for just $5!</p>
+                        <a href="https://paypal.me/nexachatai/5" target="_blank" class="inline-block w-full bg-slate-900 hover:bg-slate-800 text-yellow-400 font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                            💳 Purchase Premium - $5
+                        </a>
+                        <p class="text-xs text-slate-700">After payment, refresh the page to activate premium features</p>
+                    </div>
+                    
+                    <div class="flex gap-4">
+                        <button id="closeShopBtn" class="flex-1 bg-slate-600 hover:bg-slate-500 text-slate-200 font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                            Close
+                        </button>
+                        <button id="activatePremiumBtn" class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                            I've Paid - Activate Premium
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Start Screen -->
+            <div id="startScreen" class="absolute inset-0 bg-slate-900/90 flex items-center justify-center">
+                <div class="bg-slate-800 rounded-2xl p-8 text-center shadow-2xl space-y-6">
+                    <h1 class="text-5xl font-extrabold text-teal-400 drop-shadow-lg">2D Cube Space</h1>
+                    <p class="text-lg text-slate-300">Dodge the falling cubes and survive as long as you can!</p>
+                    <div class="text-sm text-slate-400 space-y-1">
+                        <p>Use A and D to move</p>
+                        <p>Avoid the red cubes!</p>
+                    </div>
+                    <button id="startBtn" class="w-full bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                        Start Game
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/tone@14.7.58/build/Tone.min.js"></script>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const pauseMenu = document.getElementById('pauseMenu');
+        const scoreElement = document.getElementById('score');
+        const finalScoreElement = document.getElementById('finalScore');
+        const startBtn = document.getElementById('startBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resumeBtn = document.getElementById('resumeBtn');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const perfModeToggle = document.getElementById('perfModeToggle');
+        const fpsToggle = document.getElementById('fpsToggle');
+        const fpsCounter = document.getElementById('fpsCounter');
+        const fpsValueElement = document.getElementById('fpsValue');
+        const speedSlider = document.getElementById('speedSlider');
+        const steeringModeToggle = document.getElementById('steeringModeToggle');
+        const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+        const saveMessage = document.getElementById('saveMessage');
+        const scoreList = document.getElementById('scoreList');
+        const moveLeftBtn = document.getElementById('moveLeftBtn');
+        const moveRightBtn = document.getElementById('moveRightBtn');
+        const healthBarFill = document.getElementById('healthBarFill');
+        const shopBtn = document.getElementById('shopBtn');
+        const shopScreen = document.getElementById('shopScreen');
+        const closeShopBtn = document.getElementById('closeShopBtn');
+        const activatePremiumBtn = document.getElementById('activatePremiumBtn');
+        const userPremiumStatus = document.getElementById('userPremiumStatus');
+        const goldenSkinStatus = document.getElementById('goldenSkinStatus');
+        const rainbowSkinStatus = document.getElementById('rainbowSkinStatus');
+        const shieldStatus = document.getElementById('shieldStatus');
+        const slowMoStatus = document.getElementById('slowMoStatus');
+
+        // Initialize Tone.js for audio effects
+        const scoreSynth = new Tone.Synth({
+            oscillator: { type: "sine" },
+            envelope: {
+                attack: 0.001,
+                decay: 0.1,
+                sustain: 0,
+                release: 0.1
+            }
+        }).toDestination();
+        const hitSynth = new Tone.NoiseSynth({
+            noise: { type: "white" },
+            envelope: {
+                attack: 0.01,
+                decay: 0.2,
+                sustain: 0,
+                release: 0.1
+            }
+        }).toDestination();
+        const gameOverSynth = new Tone.MembraneSynth({
+            envelope: {
+                attack: 0.001,
+                decay: 0.4,
+                sustain: 0.1,
+                release: 0.5
+            }
+        }).toDestination();
+        
+        // Function to set the volume based on the slider value
+        function setVolume(value) {
+            // Convert the 0-100 slider value to a decibel scale
+            const dbValue = value > 0 ? 20 * Math.log10(value / 100) : -Infinity;
+            Tone.Destination.volume.value = dbValue;
+        }
+
+        // Audio timing management
+        let lastAudioTime = 0;
+        const minAudioInterval = 0.05; // 50ms minimum between sounds
+
+        function playScoreSound() {
+            const now = Tone.now();
+            const audioTime = Math.max(now, lastAudioTime + minAudioInterval);
+            scoreSynth.triggerAttackRelease("C5", "8n", audioTime);
+            lastAudioTime = audioTime;
+        }
+
+        function playHitSound() {
+            const now = Tone.now();
+            const audioTime = Math.max(now, lastAudioTime + minAudioInterval);
+            hitSynth.triggerAttackRelease("16n", audioTime);
+            lastAudioTime = audioTime;
+        }
+
+        function playGameOverSound() {
+            const now = Tone.now();
+            const audioTime = Math.max(now, lastAudioTime + minAudioInterval);
+            gameOverSynth.triggerAttackRelease("C2", "4n", audioTime);
+            lastAudioTime = audioTime;
+        }
+        
+        // Game state
+        let gameRunning = false;
+        let isPaused = false;
+        let score = 0;
+        let lives = 3;
+        const maxLives = 3;
+        let gameSpeed = 2;
+        let isPerformanceMode = false;
+        let isSteeringMode = false;
+        let steeringDirection = 0; // -1 for left, 1 for right, 0 for stopped
+        let lastFrameTime = performance.now();
+        const fpsHistory = [];
+        const FPS_HISTORY_SIZE = 60;
+        
+        // Premium System
+        let isPremiumUser = false;
+        let currentSkin = 'default';
+        let hasShield = false;
+        let shieldDuration = 0;
+        let slowMotionActive = false;
+        let slowMotionDuration = 0;
+        
+        // Premium System Functions
+        function checkPremiumStatus() {
+            isPremiumUser = localStorage.getItem('premiumUser') === 'true';
+            updatePremiumUI();
+        }
+        
+        function updatePremiumUI() {
+            if (isPremiumUser) {
+                userPremiumStatus.textContent = 'Premium User';
+                userPremiumStatus.className = 'font-bold text-green-400';
+                goldenSkinStatus.innerHTML = '✅ Unlocked';
+                goldenSkinStatus.className = 'text-green-400 text-sm';
+                rainbowSkinStatus.innerHTML = '✅ Unlocked';
+                rainbowSkinStatus.className = 'text-green-400 text-sm';
+                shieldStatus.innerHTML = '✅ Unlocked';
+                shieldStatus.className = 'text-green-400 text-sm';
+                slowMoStatus.innerHTML = '✅ Unlocked';
+                slowMoStatus.className = 'text-green-400 text-sm';
+            } else {
+                userPremiumStatus.textContent = 'Free User';
+                userPremiumStatus.className = 'font-bold text-red-400';
+                goldenSkinStatus.innerHTML = '🔒 Premium';
+                goldenSkinStatus.className = 'text-red-400 text-sm';
+                rainbowSkinStatus.innerHTML = '🔒 Premium';
+                rainbowSkinStatus.className = 'text-red-400 text-sm';
+                shieldStatus.innerHTML = '🔒 Premium';
+                shieldStatus.className = 'text-red-400 text-sm';
+                slowMoStatus.innerHTML = '🔒 Premium';
+                slowMoStatus.className = 'text-red-400 text-sm';
+            }
+        }
+        
+        function activatePremium() {
+            localStorage.setItem('premiumUser', 'true');
+            isPremiumUser = true;
+            updatePremiumUI();
+            alert('Premium features activated! Enjoy your new powers!');
+        }
+        
+        // Player object
+        const player = {
+            x: canvas.width / 2 - 15,
+            y: canvas.height - 50,
+            width: 30,
+            height: 30,
+            color: '#14b8a6'
+        };
+        
+        // Premium skin colors
+        const skins = {
+            default: '#14b8a6',
+            golden: '#ffd700',
+            rainbow: null // Special handling for rainbow
+        };
+        
+        function getPlayerColor() {
+            if (!isPremiumUser) return skins.default;
+            
+            if (currentSkin === 'rainbow') {
+                // Rainbow effect based on time
+                const time = Date.now() * 0.005;
+                const r = Math.sin(time) * 127 + 128;
+                const g = Math.sin(time + 2) * 127 + 128;
+                const b = Math.sin(time + 4) * 127 + 128;
+                return `rgb(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)})`;
+            }
+            
+            return skins[currentSkin] || skins.default;
+        }
+        
+        // Cubes array
+        let cubes = [];
+
+        // Stars array for the moving background
+        let stars = [];
+        const STAR_COUNT = 150;
+
+        // Function to create a single star
+        function createStar() {
+            const size = Math.random() * 2 + 0.5;
+            return {
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: size,
+                speed: size / 2
+            };
+        }
+
+        // Initialize stars
+        function initStars() {
+            stars = [];
+            const count = isPerformanceMode ? 50 : STAR_COUNT;
+            for (let i = 0; i < count; i++) {
+                stars.push(createStar());
+            }
+        }
+
+        // Update star positions
+        function updateStars() {
+            for (let i = 0; i < stars.length; i++) {
+                stars[i].y += stars[i].speed * gameSpeed / 2; // Make stars move faster as game speed increases
+                if (stars[i].y > canvas.height) {
+                    stars[i] = createStar();
+                    stars[i].y = -10; // Reset to the top
+                }
+            }
+        }
+
+        // Draw stars
+        function drawStars() {
+            ctx.fillStyle = '#ffffff';
+            stars.forEach(star => {
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        
+        // Input handling
+        const keys = {};
+        
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            keys[key] = true;
+            if (e.key === 'Escape' && gameRunning) {
+                togglePause();
+            }
+
+            // Update steering direction if in steering mode
+            if (isSteeringMode) {
+                if (key === 'a' || key === 'arrowleft') {
+                    steeringDirection = -1;
+                } else if (key === 'd' || key === 'arrowright') {
+                    steeringDirection = 1;
+                }
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            keys[key] = false;
+            // Stop movement when a key is released in steering mode
+            if (isSteeringMode) {
+                if ((key === 'a' || key === 'arrowleft') && steeringDirection === -1) {
+                    steeringDirection = 0;
+                } else if ((key === 'd' || key === 'arrowright') && steeringDirection === 1) {
+                    steeringDirection = 0;
+                }
+            }
+        });
+
+        // Mobile touch controls
+        function handleMobileMove(direction, isMoving) {
+            if (isSteeringMode) {
+                if (direction === 'left') {
+                    steeringDirection = isMoving ? -1 : 0;
+                } else if (direction === 'right') {
+                    steeringDirection = isMoving ? 1 : 0;
+                }
+            } else {
+                if (direction === 'left') {
+                    keys['a'] = isMoving;
+                } else if (direction === 'right') {
+                    keys['d'] = isMoving;
+                }
+            }
+        }
+
+        moveLeftBtn.addEventListener('mousedown', () => handleMobileMove('left', true));
+        moveLeftBtn.addEventListener('mouseup', () => handleMobileMove('left', false));
+        moveLeftBtn.addEventListener('touchstart', (e) => { e.preventDefault(); handleMobileMove('left', true); });
+        moveLeftBtn.addEventListener('touchend', (e) => { e.preventDefault(); handleMobileMove('left', false); });
+
+        moveRightBtn.addEventListener('mousedown', () => handleMobileMove('right', true));
+        moveRightBtn.addEventListener('mouseup', () => handleMobileMove('right', false));
+        moveRightBtn.addEventListener('touchstart', (e) => { e.preventDefault(); handleMobileMove('right', true); });
+        moveRightBtn.addEventListener('touchend', (e) => { e.preventDefault(); handleMobileMove('right', false); });
+        
+        // Toggle pause function
+        function togglePause() {
+            if (!gameRunning) return;
+            isPaused = !isPaused;
+            if (isPaused) {
+                pauseMenu.classList.remove('hidden');
+            } else {
+                pauseMenu.classList.add('hidden');
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Cube constructor
+        function createCube() {
+            return {
+                x: Math.random() * (canvas.width - 30),
+                y: -30,
+                width: 30,
+                height: 30,
+                speed: gameSpeed + Math.random() * 2,
+                color: '#ef4444'
+            };
+        }
+        
+        // Update player position
+        function updatePlayer() {
+            const currentSpeed = parseFloat(speedSlider.value);
+            
+            if (isSteeringMode) {
+                player.x += steeringDirection * currentSpeed;
+            } else {
+                if ((keys['arrowleft'] || keys['a'])) {
+                    player.x -= currentSpeed;
+                }
+                if ((keys['arrowright'] || keys['d'])) {
+                    player.x += currentSpeed;
+                }
+            }
+
+            // Clamp player position to canvas boundaries
+            player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+        }
+
+        // Draw the player as a spaceship
+        function drawPlayer(ctx, player) {
+            const playerColor = getPlayerColor();
+            ctx.fillStyle = playerColor;
+            ctx.shadowColor = playerColor;
+            ctx.shadowBlur = 10;
+            
+            const pX = player.x;
+            const pY = player.y;
+            const pW = player.width;
+            const pH = player.height;
+
+            // Draw shield if active
+            if (hasShield && shieldDuration > 0) {
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 3;
+                ctx.shadowColor = '#00ffff';
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.arc(pX + pW/2, pY + pH/2, pW + 10, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.shadowBlur = 10;
+            }
+
+            // Main body (the original cube)
+            ctx.fillRect(pX, pY, pW, pH);
+
+            // Left fin
+            ctx.beginPath();
+            ctx.moveTo(pX, pY + pH);
+            ctx.lineTo(pX - pW / 2, pY + pH - 15);
+            ctx.lineTo(pX, pY + pH - 20);
+            ctx.closePath();
+            ctx.fill();
+
+            // Right fin
+            ctx.beginPath();
+            ctx.moveTo(pX + pW, pY + pH);
+            ctx.lineTo(pX + pW + pW / 2, pY + pH - 15);
+            ctx.lineTo(pX + pW, pY + pH - 20);
+            ctx.closePath();
+            ctx.fill();
+
+            // Cockpit
+            ctx.fillRect(pX + pW / 4, pY - 10, pW / 2, 10);
+            
+            ctx.shadowBlur = 0;
+        }
+
+        // Draw an enemy ship
+        function drawEnemyShip(ctx, ship) {
+            ctx.fillStyle = ship.color;
+            ctx.shadowColor = ship.color;
+            ctx.shadowBlur = 5;
+
+            const sX = ship.x;
+            const sY = ship.y;
+            const sW = ship.width;
+            const sH = ship.height;
+
+            // Main body
+            ctx.fillRect(sX, sY, sW, sH);
+
+            // Left fin
+            ctx.beginPath();
+            ctx.moveTo(sX, sY);
+            ctx.lineTo(sX - sW / 2, sY + 15);
+            ctx.lineTo(sX, sY + 20);
+            ctx.closePath();
+            ctx.fill();
+
+            // Right fin
+            ctx.beginPath();
+            ctx.moveTo(sX + sW, sY);
+            ctx.lineTo(sX + sW + sW / 2, sY + 15);
+            ctx.lineTo(sX + sW, sY + 20);
+            ctx.closePath();
+            ctx.fill();
+
+            // Cockpit
+            ctx.fillRect(sX + sW / 4, sY + sH - 10, sW / 2, 10);
+            
+            ctx.shadowBlur = 0;
+        }
+
+        // Updates the HTML health bar element
+        function updateHealthBarUI() {
+            const healthPercentage = (lives / maxLives) * 100;
+            healthBarFill.style.width = `${healthPercentage}%`;
+        }
+        
+        // Update cubes
+        function updateCubes() {
+            // Add new cubes
+            if (Math.random() < 0.02 + score * 0.0001) {
+                cubes.push(createCube());
+            }
+            
+            // Update existing cubes
+            for (let i = cubes.length - 1; i >= 0; i--) {
+                cubes[i].y += cubes[i].speed;
+                
+                // Remove cubes that are off screen
+                if (cubes[i].y > canvas.height) {
+                    cubes.splice(i, 1);
+                    score += 10;
+                    playScoreSound();
+                }
+            }
+        }
+        
+        // Check collisions
+        function checkCollisions() {
+            for (let i = cubes.length - 1; i >= 0; i--) {
+                const cube = cubes[i];
+                if (player.x < cube.x + cube.width &&
+                    player.x + player.width > cube.x &&
+                    player.y < cube.y + cube.height &&
+                    player.y + player.height > cube.y) {
+                    
+                    // Collision detected
+                    cubes.splice(i, 1);
+                    lives--;
+                    updateHealthBarUI(); // Update health bar
+                    playHitSound();
+                    
+                    if (lives <= 0) {
+                        gameOver();
+                    }
+                }
+            }
+        }
+        
+        // Draw everything
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw stars background
+            drawStars();
+
+            // Draw player as spaceship
+            drawPlayer(ctx, player);
+
+            // Draw enemy ships
+            cubes.forEach(cube => {
+                drawEnemyShip(ctx, cube);
+            });
+        }
+        
+        // Game loop
+        function gameLoop(currentTime) {
+            if (!gameRunning || isPaused) return;
+
+            // FPS calculation
+            const deltaTime = currentTime - lastFrameTime;
+            lastFrameTime = currentTime;
+            const currentFps = 1000 / deltaTime;
+            fpsHistory.push(currentFps);
+            if (fpsHistory.length > FPS_HISTORY_SIZE) {
+                fpsHistory.shift();
+            }
+            const averageFps = fpsHistory.reduce((sum, val) => sum + val, 0) / fpsHistory.length;
+            fpsValueElement.textContent = Math.round(averageFps);
+            
+            updatePlayer();
+            updateCubes();
+            updateStars();
+            checkCollisions();
+            draw();
+            
+            // Update UI
+            scoreElement.textContent = score;
+            
+            // Increase difficulty
+            gameSpeed = 2 + score * 0.001;
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start game
+        async function startGame() {
+            await Tone.start();
+            gameRunning = true;
+            isPaused = false;
+            score = 0;
+            lives = maxLives;
+            gameSpeed = 2;
+            cubes = [];
+            player.x = canvas.width / 2 - 15;
+            player.y = canvas.height - 50;
+            
+            updateHealthBarUI(); // Set the health bar to full at the start
+            
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            
+            lastFrameTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Game over
+        function gameOver() {
+            gameRunning = false;
+            playGameOverSound();
+            
+            window.saveHighScore(score);
+            
+            finalScoreElement.textContent = score;
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        // Save settings to localStorage
+        function saveSettings() {
+            const settings = {
+                volume: volumeSlider.value,
+                performanceMode: perfModeToggle.checked,
+                showFps: fpsToggle.checked,
+                speed: speedSlider.value,
+                steeringMode: steeringModeToggle.checked
+            };
+            try {
+                localStorage.setItem('gameSettings', JSON.stringify(settings));
+                saveMessage.classList.remove('hidden');
+                setTimeout(() => {
+                    saveMessage.classList.add('hidden');
+                }, 2000);
+            } catch (e) {
+                console.error("Could not save settings to localStorage:", e);
+            }
+        }
+
+        // Load settings from localStorage
+        function loadSettings() {
+            try {
+                const savedSettings = localStorage.getItem('gameSettings');
+                if (savedSettings) {
+                    const settings = JSON.parse(savedSettings);
+                    volumeSlider.value = settings.volume;
+                    perfModeToggle.checked = settings.performanceMode;
+                    fpsToggle.checked = settings.showFps;
+                    speedSlider.value = settings.speed;
+                    steeringModeToggle.checked = settings.steeringMode;
+
+                    // Apply the loaded settings
+                    setVolume(settings.volume);
+                    isPerformanceMode = settings.performanceMode;
+                    initStars();
+                    if (settings.showFps) {
+                        fpsCounter.classList.remove('hidden');
+                    } else {
+                        fpsCounter.classList.add('hidden');
+                    }
+                    isSteeringMode = settings.steeringMode;
+                }
+            } catch (e) {
+                console.error("Could not load settings from localStorage:", e);
+            }
+        }
+        
+        // Event listeners
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', startGame);
+        pauseBtn.addEventListener('click', togglePause);
+        resumeBtn.addEventListener('click', togglePause);
+        
+        // Shop event listeners
+        shopBtn.addEventListener('click', () => {
+            shopScreen.classList.remove('hidden');
+            if (gameRunning && !isPaused) {
+                togglePause();
+            }
+        });
+        
+        closeShopBtn.addEventListener('click', () => {
+            shopScreen.classList.add('hidden');
+        });
+        
+        activatePremiumBtn.addEventListener('click', () => {
+            activatePremium();
+            shopScreen.classList.add('hidden');
+        });
+        saveSettingsBtn.addEventListener('click', saveSettings);
+
+        // Add event listener for volume slider
+        volumeSlider.addEventListener('input', (e) => {
+            setVolume(e.target.value);
+        });
+
+        // Toggle performance mode and update stars
+        perfModeToggle.addEventListener('change', (e) => {
+            isPerformanceMode = e.target.checked;
+            initStars();
+        });
+
+        // Toggle FPS display
+        fpsToggle.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                fpsCounter.classList.remove('hidden');
+            } else {
+                fpsCounter.classList.add('hidden');
+            }
+        });
+
+        // Toggle steering mode
+        steeringModeToggle.addEventListener('change', (e) => {
+            isSteeringMode = e.target.checked;
+            // When switching modes, stop any current movement
+            steeringDirection = 0;
+            keys['a'] = false;
+            keys['d'] = false;
+        });
+
+        // Initialize
+        initStars();
+        loadSettings();
+        checkPremiumStatus();
+        
+        // Add premium feature controls
+        document.addEventListener('keydown', (e) => {
+            if (!isPremiumUser) return;
+            
+            // Skin switching (1, 2, 3 keys)
+            if (e.key === '1') {
+                currentSkin = 'default';
+            } else if (e.key === '2') {
+                currentSkin = 'golden';
+            } else if (e.key === '3') {
+                currentSkin = 'rainbow';
+            }
+            
+            // Shield activation (S key)
+            if (e.key.toLowerCase() === 's' && gameRunning && !hasShield) {
+                hasShield = true;
+                shieldDuration = 300; // 5 seconds at 60fps
+            }
+            
+            // Slow motion activation (X key)
+            if (e.key.toLowerCase() === 'x' && gameRunning && !slowMotionActive) {
+                slowMotionActive = true;
+                slowMotionDuration = 180; // 3 seconds at 60fps
+            }
+        });
+    </script>
+
+</body>
+</html>

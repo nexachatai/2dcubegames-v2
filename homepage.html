@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Cube Space - Homepage</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 flex flex-col md:flex-row min-h-screen">
+
+    <!-- Left Sidebar -->
+    <aside class="bg-slate-800 p-6 md:p-8 w-full md:w-64 flex flex-col items-center md:items-start shadow-xl md:shadow-none">
+        <div class="w-full text-center md:text-left mb-6">
+            <h1 class="text-3xl font-extrabold text-teal-400">Cube Games</h1>
+        </div>
+        
+        <!-- User Info Section -->
+        <div id="userInfo" class="w-full mb-6 p-4 bg-slate-700 rounded-lg hidden">
+            <div class="text-center md:text-left">
+                <p class="text-sm text-slate-400">Welcome back,</p>
+                <p id="username" class="text-lg font-bold text-teal-300"></p>
+                <p class="text-xs text-slate-500 mt-1">High Score: <span id="highScore" class="text-teal-400">0</span></p>
+            </div>
+            <button id="logoutBtn" class="w-full mt-3 bg-red-600 hover:bg-red-500 text-white text-sm py-2 rounded-lg transition-colors duration-200">
+                Logout
+            </button>
+        </div>
+        
+        <!-- Guest Login Section -->
+        <div id="guestInfo" class="w-full mb-6 p-4 bg-slate-700 rounded-lg">
+            <div class="text-center space-y-2">
+                <p class="text-sm text-slate-400">Join the community!</p>
+                <a href="login.html" class="block w-full bg-teal-600 hover:bg-teal-500 text-white text-sm py-2 rounded-lg transition-colors duration-200">
+                    Login
+                </a>
+                <a href="sign up.html" class="block w-full bg-slate-600 hover:bg-slate-500 text-white text-sm py-2 rounded-lg transition-colors duration-200">
+                    Sign Up
+                </a>
+            </div>
+        </div>
+        
+        <nav class="w-full space-y-2">
+            <a href="#" class="block px-4 py-2 rounded-lg text-lg font-semibold bg-slate-700 text-teal-400">Featured</a>
+            <a href="#" class="block px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-200">Popular</a>
+            <a href="#" class="block px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-200">New Releases</a>
+        </nav>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow p-6 md:p-10 flex flex-col">
+        <h2 class="text-3xl sm:text-4xl font-extrabold text-teal-400 mb-6 md:mb-8 text-center md:text-left">
+            Featured Games
+        </h2>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Game Card: 2D Cube Space -->
+            <div class="bg-slate-800 rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+                <div class="p-6">
+                    <h3 class="text-xl font-bold text-teal-300">2D Cube Space</h3>
+                    <p class="text-slate-400 text-sm mt-2">Dodge the falling cubes in a space environment. How long can you survive?</p>
+                </div>
+                <div class="bg-slate-700 p-4 text-center">
+                    <a href="2D Cube Space.html" class="inline-block w-full">
+                        <button class="w-full bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold py-2 rounded-full transition-all duration-300 active:scale-95">
+                            Play Now
+                        </button>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Game Card: 2D Cube Shooter -->
+            <div class="bg-slate-800 rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+                <div class="p-6">
+                    <h3 class="text-xl font-bold text-teal-300">2D Cube Shooter</h3>
+                    <p class="text-slate-400 text-sm mt-2">Shoot the falling cubes and survive as long as you can in this action-packed arcade game!</p>
+                </div>
+                <div class="bg-slate-700 p-4 text-center">
+                    <a href="2D Cube Shooter Game.html" class="inline-block w-full">
+                        <button class="w-full bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold py-2 rounded-full transition-all duration-300 active:scale-95">
+                            Play Now
+                        </button>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Placeholder Card 2 -->
+            <div class="bg-slate-800 rounded-xl overflow-hidden shadow-lg opacity-60">
+                <div class="p-6">
+                    <h3 class="text-xl font-bold text-slate-400">Coming Soon</h3>
+                    <p class="text-slate-500 text-sm mt-2">More fun games for you to explore.</p>
+                </div>
+                <div class="bg-slate-700 p-4 text-center">
+                    <button disabled class="w-full bg-slate-600 cursor-not-allowed text-slate-900 font-bold py-2 rounded-full">
+                        Play
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Check user login status and display appropriate UI
+        window.addEventListener('load', function() {
+            const currentUser = localStorage.getItem('currentUser');
+            const userInfo = document.getElementById('userInfo');
+            const guestInfo = document.getElementById('guestInfo');
+            
+            if (currentUser) {
+                const user = JSON.parse(currentUser);
+                
+                // Show user info, hide guest info
+                userInfo.classList.remove('hidden');
+                guestInfo.classList.add('hidden');
+                
+                // Update user display
+                document.getElementById('username').textContent = user.username;
+                document.getElementById('highScore').textContent = user.highScore || 0;
+            } else {
+                // Show guest info, hide user info
+                userInfo.classList.add('hidden');
+                guestInfo.classList.remove('hidden');
+            }
+        });
+        
+        // Handle logout
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+            // Remove current user session
+            localStorage.removeItem('currentUser');
+            
+            // Refresh page to update UI
+            window.location.reload();
+        });
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Cube Shooter: An Online Arcade Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/tone@14.7.58/build/Tone.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            background: #0f172a;
+            border: 2px solid #14b8a6;
+            cursor: none; /* Hide default mouse cursor */
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 flex items-center justify-center min-h-screen p-4">
+
+    <!-- Main Content Container -->
+    <div class="flex flex-col lg:flex-row items-center justify-center lg:space-x-8 space-y-8 lg:space-y-0">
+
+        <!-- Leaderboard Sidebar -->
+        <div id="leaderboard" class="bg-slate-800 rounded-lg p-6 shadow-2xl w-80 h-[600px] flex flex-col justify-between">
+            <div>
+                <h3 class="text-2xl font-bold text-teal-400 mb-4 text-center">Top Shooters</h3>
+                <ul id="scoreList" class="space-y-2">
+                    <!-- Scores will be dynamically inserted here -->
+                </ul>
+            </div>
+            <div class="text-right text-sm text-slate-500 mt-4">
+                <p id="userIdDisplay" class="text-center text-xs font-mono text-slate-500 break-all"></p>
+            </div>
+        </div>
+
+        <!-- Game Container -->
+        <div class="relative">
+            
+            <!-- Game Canvas -->
+            <canvas id="gameCanvas" width="800" height="600" class="rounded-lg shadow-2xl"></canvas>
+            
+            <!-- Game UI Overlay -->
+            <div class="absolute inset-0 p-4 pointer-events-none">
+                
+                <!-- Minimap Container -->
+                <div class="absolute top-4 left-4 z-20">
+                    <p class="text-xs font-bold text-teal-400 mb-1">Minimap</p>
+                    <canvas id="minimapCanvas" width="150" height="150" class="rounded-lg shadow-2xl border-2 border-teal-500 bg-slate-800/80"></canvas>
+                </div>
+                
+                <!-- Score & Timer Container (Top Right) -->
+                <div class="absolute top-4 right-4 flex flex-col items-end gap-2 z-20 pointer-events-auto">
+                    <!-- Score Display -->
+                    <div class="flex items-center gap-4 bg-slate-800/80 rounded-lg px-4 py-2">
+                        <span class="text-teal-400 font-bold">Score: </span>
+                        <span id="score" class="text-white font-bold">0</span>
+                    </div>
+
+                    <!-- Health Bar -->
+                    <div id="healthBarContainer" class="w-32 h-4 bg-slate-800/80 rounded-full overflow-hidden border border-slate-600">
+                        <div id="healthBarFill" class="h-full bg-green-500 transition-all duration-200"></div>
+                    </div>
+
+                    <!-- Storm Timer -->
+                    <div class="flex items-center gap-2 bg-slate-800/80 rounded-lg px-4 py-2">
+                        <span class="text-teal-400 font-bold">Storm: </span>
+                        <span id="stormTimerDisplay" class="text-white font-bold">00:00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="gameOverScreen" class="absolute inset-0 bg-slate-900/90 flex items-center justify-center hidden z-30">
+                <div class="bg-slate-800 rounded-2xl p-8 text-center shadow-2xl space-y-6">
+                    <h2 class="text-4xl font-extrabold text-red-400">Game Over!</h2>
+                    <p class="text-xl text-slate-300">Final Score: <span id="finalScore" class="text-teal-400 font-bold">0</span></p>
+                    <div class="space-y-3">
+                        <button id="restartBtn" class="w-full bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                            Play Again
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pause Menu -->
+            <div id="pauseMenu" class="absolute inset-0 bg-slate-900/90 flex items-center justify-center hidden z-30">
+                <div class="bg-slate-800 rounded-2xl p-8 text-center shadow-2xl space-y-6">
+                    <h2 class="text-4xl font-extrabold text-teal-400">Paused</h2>
+                    <p class="text-xl text-slate-300">Take a breather!</p>
+                    <div class="space-y-3">
+                        <button id="resumeBtn" class="w-full bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                            Resume
+                        </button>
+                        <button id="pauseRestartBtn" class="w-full bg-red-500 hover:bg-red-400 text-slate-900 font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                            Restart
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Start Screen -->
+            <div id="startScreen" class="absolute inset-0 bg-slate-900/90 flex items-center justify-center z-30">
+                <div class="bg-slate-800 rounded-2xl p-8 text-center shadow-2xl space-y-6">
+                    <h1 class="text-5xl font-extrabold text-teal-400 drop-shadow-lg">2D Cube Shooter</h1>
+                    <p class="text-lg text-slate-300">Shoot the falling cubes and survive as long as you can!</p>
+                    <div class="text-sm text-slate-400 space-y-1">
+                        <p>Use W, A, S, D to move</p>
+                        <p>Click the mouse to shoot</p>
+                        <p>Press ESC to pause</p>
+                    </div>
+                    <button id="startBtn" class="w-full bg-teal-500 hover:bg-teal-400 text-slate-900 font-bold py-3 px-8 rounded-full transition-all duration-300 transform hover:scale-105 shadow-lg active:scale-95">
+                        Start Game
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, serverTimestamp, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables for Firebase
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // --- Firebase Initialization and Authentication ---
+        let db;
+        let auth;
+        let userId = null;
+        let isAuthReady = false;
+
+        setLogLevel('debug');
+
+        try {
+            const app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                } else {
+                    userId = crypto.randomUUID();
+                }
+                isAuthReady = true;
+                const userIdDisplay = document.getElementById('userIdDisplay');
+                if (userIdDisplay) {
+                    userIdDisplay.textContent = `User ID: ${userId}`;
+                }
+                setupLeaderboardListener();
+            });
+
+            if (initialAuthToken) {
+                await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+                await signInAnonymously(auth);
+            }
+
+        } catch (error) {
+                console.error("Firebase initialization or authentication failed:", error);
+            }
+
+        // --- Leaderboard Functions with Firestore ---
+        function setupLeaderboardListener() {
+            if (!isAuthReady) return;
+
+            const publicScoresPath = `artifacts/${appId}/public/data/scores`;
+            const scoresCollection = collection(db, publicScoresPath);
+            const scoresQuery = query(scoresCollection);
+
+            onSnapshot(scoresQuery, (snapshot) => {
+                const scores = [];
+                snapshot.forEach((d) => {
+                    const data = d.data();
+                    scores.push({
+                        id: d.id,
+                        userId: data.userId,
+                        score: data.score,
+                        name: data.name
+                    });
+                });
+                renderLeaderboard(scores);
+            }, (error) => {
+                console.error("Error fetching leaderboard data:", error);
+            });
+        }
+        
+        async function saveHighScore(newScore) {
+            if (!isAuthReady || !userId) {
+                console.error("Authentication not ready. Cannot save score.");
+                return;
+            }
+        
+            const publicScoresPath = `artifacts/${appId}/public/data/scores`;
+            const scoresCollection = collection(db, publicScoresPath);
+            const userScoreDocRef = doc(scoresCollection, userId); // Use user's UID as document ID
+            const userName = userId; // Use full userId as the name for now
+            
+            try {
+                // Fetch the user's current high score directly
+                const docSnapshot = await getDoc(userScoreDocRef);
+                let currentScore = 0;
+                if (docSnapshot.exists()) {
+                    currentScore = docSnapshot.data().score;
+                }
+                
+                // Only save if the new score is higher
+                if (newScore > currentScore) {
+                    await setDoc(userScoreDocRef, {
+                        userId: userId,
+                        name: userName,
+                        score: newScore,
+                        timestamp: serverTimestamp()
+                    });
+                }
+            } catch (e) {
+                console.error("Error adding/updating document to Firestore: ", e);
+            }
+        }
+        
+        function renderLeaderboard(scores) {
+            const scoreList = document.getElementById('scoreList');
+            scoreList.innerHTML = '';
+            
+            if (scores.length === 0) {
+                const li = document.createElement('li');
+                li.textContent = 'No scores yet.';
+                li.className = 'text-slate-400 text-center italic';
+                scoreList.appendChild(li);
+                return;
+            }
+        
+            // Sort the scores by value in descending order and limit to top 5
+            const sortedScores = scores.sort((a, b) => b.score - a.score).slice(0, 5);
+        
+            sortedScores.forEach((s, index) => {
+                const isYou = s.userId === userId;
+                const li = document.createElement('li');
+                li.className = `flex justify-between items-center rounded-lg px-3 py-2 font-semibold ${isYou ? 'bg-teal-700 text-teal-100' : 'bg-slate-700 text-white'}`;
+                li.innerHTML = `
+                    <span class="text-sm">#${index + 1}</span>
+                    <span>${s.name}</span>
+                    <span>${s.score}</span>
+                `;
+                scoreList.appendChild(li);
+            });
+        }
+        
+        window.saveHighScore = saveHighScore;
+    </script>
+    <script>
+        // --- Game Logic and UI ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const pauseMenu = document.getElementById('pauseMenu');
+        const scoreElement = document.getElementById('score');
+        const finalScoreElement = document.getElementById('finalScore');
+        const startBtn = document.getElementById('startBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        const resumeBtn = document.getElementById('resumeBtn');
+        const pauseRestartBtn = document.getElementById('pauseRestartBtn');
+        const healthBarFill = document.getElementById('healthBarFill');
+
+        // Minimap
+        const minimapCanvas = document.getElementById('minimapCanvas');
+        const miniCtx = minimapCanvas.getContext('2d');
+        const miniMapScale = 0.1; // Reduced scale for a better overview
+
+        // Game World dimensions (for the minimap to reference)
+        const WORLD_WIDTH = 2000;
+        const WORLD_HEIGHT = 1500;
+        const WORLD_CENTER_X = WORLD_WIDTH / 2;
+        const WORLD_CENTER_Y = WORLD_HEIGHT / 2;
+
+        const stormTimerDisplay = document.getElementById('stormTimerDisplay');
+
+        // Initialize Tone.js for audio effects
+        const shootSynth = new Tone.Synth({
+            oscillator: { type: "triangle" },
+            envelope: {
+                attack: 0.001,
+                decay: 0.1,
+                sustain: 0,
+                release: 0.1
+            }
+        }).toDestination();
+        const hitSynth = new Tone.NoiseSynth({
+            noise: { type: "white" },
+            envelope: {
+                attack: 0.01,
+                decay: 0.2,
+                sustain: 0,
+                release: 0.1
+            }
+        }).toDestination();
+        const gameOverSynth = new Tone.MembraneSynth({
+            envelope: {
+                attack: 0.001,
+                decay: 0.4,
+                sustain: 0.1,
+                release: 0.5
+            }
+        }).toDestination();
+        
+        function playShootSound() { shootSynth.triggerAttackRelease("C4", "16n"); }
+        function playHitSound() { hitSynth.triggerAttackRelease("16n"); }
+        function playGameOverSound() { gameOverSynth.triggerAttackRelease("C2", "4n"); }
+        
+        // Game state variables
+        let gameRunning = false;
+        let paused = false;
+        let score = 0;
+        let lives = 3;
+        const maxLives = 3;
+        let gameSpeed = 2;
+        let isHit = false; // New state variable for the screen flash effect
+
+        // Storm system variables (now with battle royale style phases)
+        let stormRadius = Math.min(WORLD_WIDTH, WORLD_HEIGHT) / 2;
+        let nextStormRadius;
+        let stormTimer;
+        let stormPhase = 0;
+        let currentStormPhase;
+        const stormPhases = [
+            { duration: 30, targetRadius: 800 },
+            { duration: 25, targetRadius: 600 },
+            { duration: 20, targetRadius: 400 },
+            { duration: 15, targetRadius: 200 },
+            { duration: 10, targetRadius: 100 },
+            { duration: 5, targetRadius: 50 },
+        ];
+        
+        let lastFrameTime = 0;
+        
+        // Player object properties (now using world coordinates)
+        const player = {
+            x: WORLD_WIDTH / 2,
+            y: WORLD_HEIGHT / 2,
+            width: 30,
+            height: 30,
+            color: '#14b8a6',
+            speed: 300 // pixels per second
+        };
+
+        // Camera object to follow the player
+        const camera = {
+            x: 0,
+            y: 0
+        };
+
+        // Mouse coordinates on the canvas
+        let mouseX = 0;
+        let mouseY = 0;
+        
+        // Game object arrays
+        let cubes = [];
+        let projectiles = [];
+        
+        // Input handling
+        const keys = {};
+        
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            keys[key] = true;
+            if (e.key === 'Escape' && gameRunning) {
+                togglePause();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            keys[key] = false;
+        });
+
+        // Event listener for mouse clicks
+        document.addEventListener('mousedown', (e) => {
+            if (gameRunning && !paused) {
+                shoot();
+            }
+        });
+
+        // Event listener for mouse movement to get aiming coordinates
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+
+        // Toggles the pause state and shows/hides the pause menu
+        function togglePause() {
+            paused = !paused;
+            if (paused) {
+                pauseMenu.classList.remove('hidden');
+            } else {
+                pauseMenu.classList.add('hidden');
+                // Resume the game loop
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Creates a new projectile from player's world coordinates
+        function shoot() {
+            // Convert mouse screen coordinates to world coordinates
+            const worldMouseX = mouseX + camera.x;
+            const worldMouseY = mouseY + camera.y;
+
+            // Only allow shooting if aiming away from the player
+            const dx = worldMouseX - player.x;
+            const dy = worldMouseY - player.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance > player.width / 2) {
+                // Set a fixed projectile speed
+                const projectileSpeed = 500; // pixels per second
+
+                // Calculate velocity components
+                const vx = (dx / distance) * projectileSpeed;
+                const vy = (dy / distance) * projectileSpeed;
+
+                const projectile = {
+                    x: player.x,
+                    y: player.y,
+                    width: 4,
+                    height: 10,
+                    vx: vx,
+                    vy: vy,
+                    color: '#fff'
+                };
+                projectiles.push(projectile);
+                playShootSound();
+            }
+        }
+        
+        // Update player's world position based on keyboard input
+        function updatePlayer(deltaTime) {
+            const moveSpeed = player.speed * deltaTime;
+            if (keys['a']) {
+                player.x -= moveSpeed;
+            }
+            if (keys['d']) {
+                player.x += moveSpeed;
+            }
+            if (keys['w']) {
+                player.y -= moveSpeed;
+            }
+            if (keys['s']) {
+                player.y += moveSpeed;
+            }
+            // Clamp player position to stay within the world bounds
+            player.x = Math.max(0, Math.min(WORLD_WIDTH, player.x));
+            player.y = Math.max(0, Math.min(WORLD_HEIGHT, player.y));
+        }
+
+        // Updates the camera to follow the player
+        function updateCamera() {
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+        }
+
+        // Updates the health bar UI
+        function updateHealthBarUI() {
+            const healthPercentage = (lives / maxLives) * 100;
+            healthBarFill.style.width = `${healthPercentage}%`;
+        }
+        
+        // Time tracking for storm damage
+        let lastStormDamageTime = 0;
+        const stormDamageInterval = 1000; // 1 second in milliseconds
+
+        // Checks if player is inside the storm's safe zone (based on world coordinates)
+        function checkStormDamage(timestamp) {
+            const distanceToCenter = Math.sqrt(Math.pow(player.x - WORLD_CENTER_X, 2) + Math.pow(player.y - WORLD_CENTER_Y, 2));
+            if (distanceToCenter > stormRadius) {
+                // Check if enough time has passed to apply damage
+                if (timestamp - lastStormDamageTime >= stormDamageInterval) {
+                    const damage = maxLives * 0.1; // 10% of max health
+                    lives -= damage;
+                    if (lives <= 0) {
+                        gameOver();
+                    }
+                    updateHealthBarUI();
+                    lastStormDamageTime = timestamp; // Reset timer for the next tick
+                }
+            }
+        }
+
+        // Updates storm size and timer
+        function updateStorm(deltaTime) {
+            if (stormPhase >= stormPhases.length) {
+                // Storm has reached its final size
+                return;
+            }
+
+            const currentPhase = stormPhases[stormPhase];
+            stormTimer -= deltaTime;
+            
+            if (stormTimer <= 0) {
+                // Move to next phase
+                stormPhase++;
+                if (stormPhase < stormPhases.length) {
+                    currentStormPhase = stormPhases[stormPhase];
+                    stormTimer = currentStormPhase.duration;
+                    nextStormRadius = currentStormPhase.targetRadius;
+                    stormRadius = stormPhases[stormPhase - 1].targetRadius; // Start shrinking from the previous target
+                } else {
+                    stormRadius = stormPhases[stormPhases.length - 1].targetRadius;
+                }
+            } else {
+                const totalShrinkDistance = currentStormPhase.targetRadius - stormRadius;
+                const shrinkRate = totalShrinkDistance / currentStormPhase.duration;
+                stormRadius += shrinkRate * deltaTime;
+            }
+        }
+
+        // Creates a new cube at a random location in the world
+        function createCube() {
+            const side = Math.floor(Math.random() * 4);
+            let x, y;
+            if (side === 0) { // Top
+                x = Math.random() * WORLD_WIDTH;
+                y = -30;
+            } else if (side === 1) { // Right
+                x = WORLD_WIDTH + 30;
+                y = Math.random() * WORLD_HEIGHT;
+            } else if (side === 2) { // Bottom
+                x = Math.random() * WORLD_WIDTH;
+                y = WORLD_HEIGHT + 30;
+            } else { // Left
+                x = -30;
+                y = Math.random() * WORLD_HEIGHT;
+            }
+
+            return {
+                x: x,
+                y: y,
+                width: 30,
+                height: 30,
+                speed: gameSpeed + Math.random() * 1.5,
+                color: '#ef4444'
+            };
+        }
+        
+        // Updates the positions of all cubes and removes those that go off-screen
+        function updateCubes() {
+            // Spawn new cubes that are attracted to the player
+            if (Math.random() < 0.01 + score * 0.0001) {
+                cubes.push(createCube());
+            }
+            
+            for (let i = cubes.length - 1; i >= 0; i--) {
+                const cube = cubes[i];
+                
+                // Calculate the direction vector from cube to player
+                const dx = player.x - cube.x;
+                const dy = player.y - cube.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance > 1) {
+                    const vx = (dx / distance) * cube.speed;
+                    const vy = (dy / distance) * cube.speed;
+                    cube.x += vx;
+                    cube.y += vy;
+                }
+            }
+        }
+
+        // Updates the positions of all projectiles
+        function updateProjectiles(deltaTime) {
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const projectile = projectiles[i];
+                projectile.x += projectile.vx * deltaTime;
+                projectile.y += projectile.vy * deltaTime;
+                
+                // Remove projectiles that go off-screen
+                if (projectile.x < camera.x || projectile.x > camera.x + canvas.width || 
+                    projectile.y < camera.y || projectile.y > camera.y + canvas.height) {
+                    projectiles.splice(i, 1);
+                }
+            }
+        }
+        
+        // Checks for collisions between game objects (using world coordinates)
+        function checkCollisions() {
+            // Player vs Cube collisions
+            for (let i = cubes.length - 1; i >= 0; i--) {
+                const cube = cubes[i];
+                if (player.x < cube.x + cube.width &&
+                    player.x + player.width > cube.x &&
+                    player.y < cube.y + cube.height &&
+                    player.y + player.height > cube.y) {
+                    
+                    cubes.splice(i, 1);
+                    lives--;
+                    isHit = true; // Set hit state to trigger red flash
+                    setTimeout(() => isHit = false, 200); // Reset hit state after 200ms
+                    updateHealthBarUI();
+                    playHitSound();
+                    
+                    if (lives <= 0) {
+                        gameOver();
+                    }
+                }
+            }
+
+            // Projectile vs Cube collisions
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                for (let j = cubes.length - 1; j >= 0; j--) {
+                    const projectile = projectiles[i];
+                    const cube = cubes[j];
+
+                    if (projectile.x < cube.x + cube.width &&
+                        projectile.x + projectile.width > cube.x &&
+                        projectile.y < cube.y + cube.height &&
+                        projectile.y + projectile.height > cube.y) {
+                        
+                        projectiles.splice(i, 1);
+                        cubes.splice(j, 1);
+                        score += 10;
+                        playHitSound();
+                        break; // Exit inner loop to prevent double collision
+                    }
+                }
+            }
+        }
+        
+        // Draws all game objects on the canvas with camera offset
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw storm danger zone
+            ctx.save();
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.4)'; // Semi-transparent red
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.beginPath();
+            ctx.arc(WORLD_CENTER_X - camera.x, WORLD_CENTER_Y - camera.y, stormRadius, 0, 2 * Math.PI);
+            ctx.fillStyle = 'black'; // Color doesn't matter, just used to mask
+            ctx.fill();
+            ctx.restore();
+
+            // Draw cubes with camera offset
+            cubes.forEach(cube => {
+                ctx.fillStyle = cube.color;
+                ctx.fillRect(cube.x - camera.x, cube.y - camera.y, cube.width, cube.height);
+            });
+
+            // Draw projectiles with camera offset
+            projectiles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.fillRect(p.x - camera.x, p.y - camera.y, p.width, p.height);
+            });
+
+            // Player is always drawn in the center of the screen
+            ctx.fillStyle = player.color;
+            ctx.fillRect(canvas.width / 2 - player.width / 2, canvas.height / 2 - player.height / 2, player.width, player.height);
+
+            // Draw aiming crosshair (relative to canvas, not world)
+            if (gameRunning && !paused) {
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+
+                // Vertical line of crosshair
+                ctx.beginPath();
+                ctx.moveTo(mouseX, mouseY - 10);
+                ctx.lineTo(mouseX, mouseY + 10);
+                ctx.stroke();
+
+                // Horizontal line of crosshair
+                ctx.beginPath();
+                ctx.moveTo(mouseX - 10, mouseY);
+                ctx.lineTo(mouseX + 10, mouseY);
+                ctx.stroke();
+            }
+
+            // Draw aiming line (from center of screen to mouse)
+            if (gameRunning && !paused) {
+                ctx.beginPath();
+                ctx.moveTo(canvas.width / 2, canvas.height / 2);
+                ctx.lineTo(mouseX, mouseY);
+                ctx.strokeStyle = '#06b6d4';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // Draw a semi-transparent red rectangle over the entire canvas if the player is hit
+            if (isHit) {
+                ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        // Draws the minimap (shows the whole world, not just the current view)
+        function drawMinimap() {
+            miniCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+            miniCtx.strokeStyle = '#334155';
+            miniCtx.lineWidth = 2;
+            miniCtx.strokeRect(0, 0, WORLD_WIDTH * miniMapScale, WORLD_HEIGHT * miniMapScale);
+
+            // Draw next storm circle (faint yellow)
+            if (stormPhase < stormPhases.length) {
+                miniCtx.beginPath();
+                miniCtx.arc(WORLD_CENTER_X * miniMapScale, WORLD_CENTER_Y * miniMapScale, nextStormRadius * miniMapScale, 0, 2 * Math.PI);
+                miniCtx.strokeStyle = 'rgba(255, 255, 0, 0.4)';
+                miniCtx.lineWidth = 2;
+                miniCtx.stroke();
+            }
+
+            // Draw the current storm circle on the minimap
+            miniCtx.beginPath();
+            miniCtx.arc(WORLD_CENTER_X * miniMapScale, WORLD_CENTER_Y * miniMapScale, stormRadius * miniMapScale, 0, 2 * Math.PI);
+            miniCtx.strokeStyle = '#ef4444';
+            miniCtx.lineWidth = 2;
+            miniCtx.stroke();
+            
+            // Draw player on the minimap
+            miniCtx.fillStyle = player.color;
+            miniCtx.beginPath();
+            miniCtx.arc(player.x * miniMapScale, player.y * miniMapScale, 4, 0, 2 * Math.PI);
+            miniCtx.fill();
+
+            // Draw camera view outline on minimap
+            miniCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            miniCtx.lineWidth = 1;
+            miniCtx.strokeRect(camera.x * miniMapScale, camera.y * miniMapScale, canvas.width * miniMapScale, canvas.height * miniMapScale);
+
+            // Draw enemies on the minimap
+            cubes.forEach(cube => {
+                miniCtx.fillStyle = cube.color;
+                miniCtx.fillRect(cube.x * miniMapScale - 1.5, cube.y * miniMapScale - 1.5, 3, 3);
+            });
+            
+            // Draw storm timer on the minimap
+            miniCtx.fillStyle = '#fff';
+            miniCtx.font = '14px Inter';
+            miniCtx.textAlign = 'center';
+            miniCtx.fillText(Math.max(0, Math.floor(stormTimer)), minimapCanvas.width / 2, 20);
+        }
+        
+        // Main game loop
+        function gameLoop(timestamp) {
+            if (!gameRunning || paused) return;
+
+            const deltaTime = (timestamp - lastFrameTime) / 1000;
+            lastFrameTime = timestamp;
+
+            updatePlayer(deltaTime);
+            updateCamera();
+            updateCubes();
+            updateProjectiles(deltaTime);
+            checkCollisions();
+            updateStorm(deltaTime);
+            checkStormDamage(timestamp);
+            draw();
+            drawMinimap();
+            
+            scoreElement.textContent = score;
+            gameSpeed = 2 + score * 0.001;
+
+            stormTimerDisplay.textContent = Math.max(0, Math.floor(stormTimer));
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Starts the game
+        async function startGame() {
+            await Tone.start();
+            gameRunning = true;
+            paused = false;
+            score = 0;
+            lives = maxLives;
+            gameSpeed = 2;
+            cubes = [];
+            projectiles = [];
+            
+            // Reset player to the center of the world
+            player.x = WORLD_WIDTH / 2;
+            player.y = WORLD_HEIGHT / 2;
+            
+            // Reset storm state
+            stormPhase = 0;
+            stormRadius = WORLD_CENTER_X; // Initial radius
+            currentStormPhase = stormPhases[stormPhase];
+            stormTimer = currentStormPhase.duration;
+            nextStormRadius = currentStormPhase.targetRadius;
+            
+            updateHealthBarUI();
+            
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            pauseMenu.classList.add('hidden');
+            canvas.style.cursor = 'none';
+
+            // Reset storm damage timer
+            lastStormDamageTime = performance.now();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Ends the game and displays the game over screen
+        function gameOver() {
+            gameRunning = false;
+            playGameOverSound();
+            
+            window.saveHighScore(score);
+            
+            finalScoreElement.textContent = score;
+            gameOverScreen.classList.remove('hidden');
+            canvas.style.cursor = 'default';
+        }
+        
+        // Event listeners for the UI buttons
+        startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', startGame);
+        resumeBtn.addEventListener('click', () => {
+            togglePause();
+        });
+        pauseRestartBtn.addEventListener('click', () => {
+            startGame();
+        });
+
+    </script>
+</body>
+</html>
